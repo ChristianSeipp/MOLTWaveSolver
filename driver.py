@@ -13,7 +13,7 @@ from lineSolve import lineSolve
 
 a = -2
 b = 2
-N = 32
+N = 16
 x1 = np.linspace(-2, -1.75, 4*N)
 x2 = np.linspace(-1.75, -1.0 , 16*N)
 x3 = np.linspace(-1.0, -.5 , 16*N)
@@ -25,12 +25,12 @@ x8 = np.linspace(1.5 , 2 , 16*N)
 #x1 = np.linspace(-2, 0, N,dtype = np.float32)
 #x2 = np.linspace(0, 2 , N,dtype = np.float32)
 p = 144*2
-f = lambda x: math.exp(-p*((x-(a+b)/2)/(b-a))**2)
-g = lambda x: 2*p/(b-a)**2*(x-(a+b)/2)*math.exp(  -p*( (x-(a+b)/2) / (b-a) )**2)
+f = lambda x: 0#lambda x: math.exp(-p*((x-(a+b)/2)/(b-a))**2)
+g = lambda x: 0#lambda x: 2*p/(b-a)**2*(x-(a+b)/2)*math.exp(  -p*( (x-(a+b)/2) / (b-a) )**2)
 #f = lambda x: math.cos(40*x)/(1+10*x**2)
 #g  = lambda x: 0
 c = 1
-cfl = 10
+cfl = 5
 bcs = "periodic"
 
 solver = lineSolve([x1,x2,x3,x4,x5,x6,x7,x8], f, g , c , cfl , bcs)
@@ -49,4 +49,4 @@ def init():
 fig   = plt.figure()
 ax    = plt.axes(xlim=(-2,2),ylim = (-1.3,4))
 line, = ax.plot([],[] , lw=2)
-anim = animation.FuncAnimation(fig,animate, blit=True)
+anim = animation.FuncAnimation(fig,animate, blit=True,frames = len(uSoln),interval = 20)

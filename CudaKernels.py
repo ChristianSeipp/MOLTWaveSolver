@@ -11,8 +11,8 @@ import math
 
 device = cuda.get_current_device()
 
-@cuda.jit('void(float32[:],float32,float32,float32,float32,float32,float32[:],float32[:] ,float32[:],float32[:], uint32)',device = True)
-def calcLocalJs(uvals,P,Q,R,vjsqrinv,dj,quadCoeffs,JLvals,JRvals, w ,JSize):
+@cuda.jit('void(float32[:],float32,float32,float32,float32,float32,float32[:],float32[:] ,float32[:], uint32)',device = True)
+def calcLocalJs(uvals,P,Q,R,vjsqrinv,dj,quadCoeffs,JLvals,JRvals ,JSize):
         #do a finite difference stencil for the second derivative at every point
         #in our mesh. do a 4 point stencil at the ends to preserve accuracy
         j = cuda.threadIdx.x
@@ -34,8 +34,7 @@ def calcLocalJs(uvals,P,Q,R,vjsqrinv,dj,quadCoeffs,JLvals,JRvals, w ,JSize):
             JRreverse = P*uvals[-(j+2)]+Q*uvals[ -(j+1) ] + R*quadCoeffs[-(j+2)] 
             JRvals[JSize-j-2] = JRreverse
 
-
-            """
+"""
 solve the local pieces of the wave equation in 1d and return the end points of this calculation
 each thread is going to solve a local piece of the wave equation and return an end point
 
@@ -80,7 +79,7 @@ def uLocal1D(uvalsMatrix, Plist , Qlist , Rlist
     vjsqrinv = vjInvList[i]
     dj       = djlist[i]
     
-    calcLocalJs(uvalsMatrix[i,:],P,Q,R,vjsqrinv,dj,quadCoeffsMatrix[i,:],JLvalMatrix[i,:],JRvalMatrix[i,:], wMatrix[i,:] ,JSize)
+    calcLocalJs(uvalsMatrix[i,:],P,Q,R,vjsqrinv,dj,quadCoeffsMatrix[i,:],JLvalMatrix[i,:],JRvalMatrix[i,:] , JSize)
     
     cuda.syncthreads()
     #wait for all threads to finish
@@ -91,16 +90,19 @@ def uLocal1D(uvalsMatrix, Plist , Qlist , Rlist
         index =0
         
         while index < JSize:
-            
             if index != 0:
                 JLvalMatrix[i][index] = dj*JLvalMatrix[i][index-1]+JLvalMatrix[i][index]
             if index !=JSize-1:
                 reverseIndex = JSize-index-1
                 JRvalMatrix[i][reverseIndex-1] = dj*JRvalMatrix[i][reverseIndex] + JRvalMatrix[i][reverseIndex-1]
             index += 1
+    
     cuda.syncthreads()
+    
     wMatrix[i,j] = JLvalMatrix[i,j] + JRvalMatrix[i,j]
+    
     cuda.syncthreads()
+    
     if j == 1:
         leftComm[len(uvalsMatrix) - i - 1] = wMatrix[i][0]
         rightComm[i]  = wMatrix[i][JSize-1]
@@ -108,13 +110,23 @@ def uLocal1D(uvalsMatrix, Plist , Qlist , Rlist
     cuda.syncthreads()
     #we should have a different P,Q,R  , vj, and dj for each sub domain, 
 
-    
-@cuda.jit('void(float32[:,:],float32[:,:],float32[:,:],float32[:,:],float32[:],float32[:],float32, float32,float32[:],float32[:])')
-def uUpdate1D(uvalsMatrix, wMatrix, xvals , uPrevMatrix,A,B,alpha,beta,a,b):
+"""
+this function should change to whatever the source function is 
+f(x,y)*dt*exp(-alpha*abs(x-midpoint))
+"""
+@cuda.jit('float32(float32,float32,float32,float32,float32)',device = True)
+def sourceTerm(dt,time,alpha,x,wVal):
+    return 10*(math.tanh(20*time-40)**2-math.tanh(20*time-20)**2)*dt*math.exp(-alpha*abs(x))
+    #print (wVal)
+
+@cuda.jit('void(float32[:,:],float32[:,:],float32[:,:],float32,float32, float32[:,:],float32[:],float32[:],float32, float32,float32[:],float32[:])')
+def uUpdate1D(uvalsMatrix, wMatrix, xvals ,dt, time, uPrevMatrix,A,B,alpha,beta,a,b):
     j = cuda.threadIdx.x
     i = cuda.blockIdx.x
     
     wMatrix[i,j] = wMatrix[i,j]+A[i]*math.exp(-alpha*(xvals[i,j] - a[i] ) ) + B[i]*math.exp(-alpha *(b[i]  - xvals[i,j]))
+    
+    wMatrix[i,j] += sourceTerm(dt,time,alpha,xvals[i,j] , wMatrix[i,j])
     
     wMatrix[i,j] = uvalsMatrix[i,j] - .5*wMatrix[i,j]
     wMatrix[i,j] = 2*uvalsMatrix[i,j] - uPrevMatrix[i,j] - beta**2*wMatrix[i,j]
@@ -122,3 +134,4 @@ def uUpdate1D(uvalsMatrix, wMatrix, xvals , uPrevMatrix,A,B,alpha,beta,a,b):
     uvalsMatrix[i,j] = wMatrix[i,j]
     
     cuda.syncthreads()
+

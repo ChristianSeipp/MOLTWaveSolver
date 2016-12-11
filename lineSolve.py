@@ -1,12 +1,5 @@
-# -*- coding: utf-8 -*-
-
-from CudaKernels import *
 from lineSeg import lineSeg
-"""
-Created on Thu Dec  8 04:22:20 2016
-
-@author: Chris
-"""
+from CudaKernels import *
 
 """
 solve the wave equation on a 1D line
@@ -18,10 +11,9 @@ c        - speed of wave propogation
 cfl      - relationship between the time and spatial discretization
 bcs      - what type of boundary conditions do we have?
 """
-
 class lineSolve:
     def __init__(self,xdomains, f, g , c , cfl , bcs):
-        
+
         self.beta_ = 2
         self.bcType_ = bcs
         self.lineSegs_ = []
@@ -73,8 +65,10 @@ class lineSolve:
             segment.setTimestep(self.dt_)
         
         self.nDomains_ = len(self.lineSegs_)
-        self.time_ = 2*self.dt_
+        self.time_ = self.dt_
+        
         print(self.nDomains_*self.minSize_)
+        
         self.numThreads_ = self.nDomains_
         self.numBlocks_ = 1
         if self.numThreads_ > device.WARP_SIZE:
@@ -124,6 +118,8 @@ class lineSolve:
     and have to do everything locally in this context
     """
     def calcTimeStep(self):
+        self.time_ += self.dt_
+        
         emptyMatrix    = np.zeros((self.nDomains_ , self.minSize_ ),dtype = np.float32)
         emptyList      = np.zeros(self.nDomains_,dtype=np.float32)
 
@@ -158,6 +154,7 @@ class lineSolve:
         hJSizeList  = np.array([len(segment) for segment in self.lineSegs_],dtype = np.uint32)#should be constant currently
         
         # transfer all the data to the device
+        
         dUValsMatrix  = cuda.to_device(hUValsMatrix)
         dPlist = cuda.to_device(hPlist)
         dQlist = cuda.to_device(hQlist)
@@ -196,8 +193,8 @@ class lineSolve:
         dxvals_      = cuda.to_device(hxvals_)
         dUPrevMatrix = cuda.to_device (hUPrevMatrix)
            
-        uUpdate1D[self.nDomains_, hJSizeList[0]](dUValsMatrix, dwMatrix, dxvals_ 
-                    , dUPrevMatrix,dA_,dB_,self.alpha_,self.beta_,da_,db_)
+        uUpdate1D[self.nDomains_, hJSizeList[0]](dUValsMatrix, dwMatrix, dxvals_ , self.dt_,
+                   self.time_ , dUPrevMatrix,dA_,dB_,self.alpha_,self.beta_,da_,db_)
 
         hUValsMatrix = dUValsMatrix.copy_to_host()
         hUPrevMatrix  = dUPrevMatrix.copy_to_host()
